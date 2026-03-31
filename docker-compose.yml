@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: bank_db_container
+    restart: always
+    environment:
+      MYSQL_DATABASE: 'banking_db'
+      MYSQL_ROOT_PASSWORD: 'root_password'
+      MYSQL_USER: 'bank_user'
+      MYSQL_PASSWORD: 'your_password'
+    ports:
+      - "3306:3306"
+    volumes:
+      # This line runs your init.sql automatically on startup
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - mysql_data:/var/lib/mysql
+
+  app:
+    build: .
+    container_name: bank_flask_app
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      MYSQL_HOST: 'db' # Crucial: Match the service name above
+      MYSQL_USER: 'bank_user'
+      MYSQL_PASSWORD: 'your_password'
+      MYSQL_DB: 'banking_db'
+    depends_on:
+      - db
+
+# Define the named volume at the bottom of the file
+volumes:
+  mysql_data:

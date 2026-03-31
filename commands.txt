@@ -1,0 +1,16 @@
+sudo apt update
+sudo apt install -y docker.io docker-compose
+
+sudo docker-compose up --build -d
+
+sudo docker logs bank_flask_app
+
+sudo docker logs bank_db_container
+
+# Stop containers and remove volumes (this deletes old/broken DB data)
+sudo docker-compose down -v
+
+# Prune any hanging build cache
+sudo docker system prune -f
+
+
