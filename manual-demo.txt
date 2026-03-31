@@ -1,0 +1,182 @@
+sudo apt update
+sudo apt install mysql-server python3-pip python3-dev libmysqlclient-dev -y
+sudo apt install -y pkg-config libmysqlclient-dev build-essential vim
+
+sudo mysql
+
+CREATE DATABASE banking_db;
+USE banking_db;
+
+CREATE TABLE customers (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    account_number VARCHAR(20) UNIQUE NOT NULL,
+    balance DECIMAL(15, 2) DEFAULT 0.00
+);
+
+-- Replace 'your_password' with a strong password
+CREATE USER 'bank_user'@'localhost' IDENTIFIED BY 'your_password';
+GRANT ALL PRIVILEGES ON banking_db.* TO 'bank_user'@'localhost';
+FLUSH PRIVILEGES;
+EXIT;
+
+
+
+mkdir banking_app && cd banking_app
+pip3 install "Flask==2.3.3" "Werkzeug==2.3.7" flask-mysqldb
+
+===========
+cat app.py
+===========
+
+from flask import Flask, render_template, request, redirect, url_for, flash
+from flask_mysqldb import MySQL
+
+app = Flask(__name__)
+app.secret_key = 'supersecretkey'
+
+# MySQL Configuration
+app.config['MYSQL_HOST'] = 'localhost'
+app.config['MYSQL_USER'] = 'bank_user'
+app.config['MYSQL_PASSWORD'] = 'your_password'
+app.config['MYSQL_DB'] = 'banking_db'
+
+mysql = MySQL(app)
+
+@app.route('/')
+def index():
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT * FROM customers")
+    customers = cur.fetchall()
+    cur.close()
+    return render_template('index.html', customers=customers)
+
+@app.route('/create', methods=['POST'])
+def create():
+    name = request.form['name']
+    acc_num = request.form['acc_num']
+    cur = mysql.connection.cursor()
+    try:
+        cur.execute("INSERT INTO customers (name, account_number, balance) VALUES (%s, %s, 0)", (name, acc_num))
+        mysql.connection.commit()
+        flash("Customer Created Successfully!")
+    except:
+        flash("Error: Account number might already exist.")
+    cur.close()
+    return redirect(url_for('index'))
+
+@app.route('/transaction', methods=['POST'])
+def transaction():
+    acc_num = request.form['acc_num']
+    amount = float(request.form['amount'])
+    action = request.form['action']
+    
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT balance FROM customers WHERE account_number = %s", [acc_num])
+    result = cur.fetchone()
+
+    if result:
+        current_balance = float(result[0])
+        if action == 'deposit':
+            new_balance = current_balance + amount
+        else: # withdrawal
+            if current_balance >= amount:
+                new_balance = current_balance - amount
+            else:
+                flash("Insufficient Funds!")
+                return redirect(url_for('index'))
+        
+        cur.execute("UPDATE customers SET balance = %s WHERE account_number = %s", (new_balance, acc_num))
+        mysql.connection.commit()
+        flash(f"{action.capitalize()} Successful!")
+    else:
+        flash("Account Not Found!")
+    
+    cur.close()
+    return redirect(url_for('index'))
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
+
+
+
+
+
+mkdir templates
+touch templates/index.html
+
+============================
+cat templates/index.html
+===========================
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple Flask Bank</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+<body class="container mt-5">
+    <h2>Bank Management System</h2>
+    
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        {% for message in messages %}
+          <div class="alert alert-info">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <div class="row">
+        <div class="col-md-6 border p-3">
+            <h4>Create New Customer</h4>
+            <form action="/create" method="POST">
+                <input type="text" name="name" placeholder="Full Name" class="form-control mb-2" required>
+                <input type="text" name="acc_num" placeholder="Account Number" class="form-control mb-2" required>
+                <button type="submit" class="btn btn-primary">Create</button>
+            </form>
+        </div>
+
+        <div class="col-md-6 border p-3">
+            <h4>Deposit / Withdrawal</h4>
+            <form action="/transaction" method="POST">
+                <input type="text" name="acc_num" placeholder="Account Number" class="form-control mb-2" required>
+                <input type="number" name="amount" placeholder="Amount" step="0.01" class="form-control mb-2" required>
+                <select name="action" class="form-control mb-2">
+                    <option value="deposit">Deposit</option>
+                    <option value="withdraw">Withdraw</option>
+                </select>
+                <button type="submit" class="btn btn-success">Execute</button>
+            </form>
+        </div>
+    </div>
+
+    <h4 class="mt-5">Customer Accounts & Total Balance</h4>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Account #</th>
+                <th>Balance</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in customers %}
+            <tr>
+                <td>{{ row[0] }}</td>
+                <td>{{ row[1] }}</td>
+                <td>{{ row[2] }}</td>
+                <td>₹{{ row[3] }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>
+
+# Now run
+
+python3 app.py
+
+
+
